@@ -1,0 +1,13 @@
+# Arquivos sensíveis
+credentials.json
+.env
+
+# Ambiente virtual
+.venv/
+
+# Cache Python
+__pycache__/
+*.pyc
+
+# Driver do navegador (opcional, se quiser versionar)
+# edgedriver_linux64/
