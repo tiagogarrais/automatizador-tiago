@@ -11,3 +11,6 @@ __pycache__/
 
 # Driver do navegador (opcional, se quiser versionar)
 # edgedriver_linux64/
+
+# Relatórios gerados
+relatorio_unidades.txt

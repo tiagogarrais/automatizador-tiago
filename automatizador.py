@@ -1,6 +1,7 @@
 import os
 import time
 import logging
+import argparse
 from dotenv import load_dotenv
 import gspread
 from google.oauth2.service_account import Credentials
@@ -16,6 +17,11 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 # Carregar variáveis de ambiente
 load_dotenv()
+
+# Configurar argparse
+parser = argparse.ArgumentParser(description='Automatizador de preenchimento web.')
+parser.add_argument('--verificar', action='store_true', help='Modo de verificação: verifica unidades compatíveis e gera relatório.')
+args = parser.parse_args()
 UNIDADE_MAP = {
     "Saco de 50 Kg": "Saco 50 Quilograma",
     "Saco 50 Kg": "Saco 50 Quilograma",
@@ -65,8 +71,15 @@ SITE_URL = os.getenv('SITE_URL')
 BUSCA_URL = os.getenv('BUSCA_URL')
 
 # Configurações de processamento
-START_ITEM = 1  # Item inicial (linha START_ITEM da planilha)
-END_ITEM = 3   # Item final (None para processar até o fim)
+START_ITEM = int(os.getenv('START_ITEM', 1))  # Item inicial (linha START_ITEM da planilha)
+END_ITEM_str = os.getenv('END_ITEM', '').strip()
+if END_ITEM_str.lower() == 'none' or END_ITEM_str == '':
+    END_ITEM = None
+else:
+    try:
+        END_ITEM = int(END_ITEM_str)
+    except ValueError:
+        END_ITEM = None  # Item final (deixe vazio ou 'None' para processar até o fim)
 
 def setup_google_sheets():
     try:
@@ -132,6 +145,7 @@ def process_data(driver, data):
     logging.info(f"Número de abas/janelas abertas: {len(driver.window_handles)}")
     # Usar a aba atual para busca (assumir que 'Incluir Itens' já abriu a aba de busca)
     driver.get(BUSCA_URL)  # Garantir que estamos na página de busca
+    time.sleep(5)  # Aguardar a página carregar completamente
     logging.info("Carregada página de busca na aba atual.")
 
     erros = []  # Lista para coletar itens que falharam
@@ -159,8 +173,9 @@ def process_data(driver, data):
                 ]
                 for by, selector in selectors:
                     try:
-                        WebDriverWait(driver, 30).until(EC.presence_of_element_located((by, selector)))
-                        catmat_field = driver.find_element(by, selector)
+                        catmat_field = WebDriverWait(driver, 10).until(
+                            EC.element_to_be_clickable((by, selector))
+                        )
                         logging.info(f"Campo CATMAT encontrado com seletor: {by} - {selector}")
                         break
                     except:
@@ -182,11 +197,11 @@ def process_data(driver, data):
             time.sleep(1)
             logging.info("Selecionando unidade...")
             try:
-                WebDriverWait(driver, 60).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'select.ng-untouched.ng-pristine.ng-valid')))
+                WebDriverWait(driver, 60).until(EC.presence_of_element_located((By.CSS_SELECTOR, 'select.ng-pristine.ng-valid')))
             except Exception as e:
                 logging.warning(f"CATMAT '{catmat}' não encontrado ou dropdown de unidade não apareceu: {e}. Pulando para próxima linha.")
                 continue
-            unidade_select = Select(driver.find_element(By.CSS_SELECTOR, 'select.ng-untouched.ng-pristine.ng-valid'))
+            unidade_select = Select(driver.find_element(By.CSS_SELECTOR, 'select.ng-pristine.ng-valid'))
             try:
                 unidade_select.select_by_visible_text(unidade)
             except Exception as e:
@@ -222,7 +237,78 @@ def process_data(driver, data):
     else:
         logging.info("Nenhum erro na seleção de unidades.")
 
-    # Não fechar a aba, para conferência manual
+def verificar_unidades(driver, data):
+    driver.get(BUSCA_URL)  # Carregar a página de busca
+    time.sleep(5)  # Aguardar a página carregar completamente
+    relatorio = []
+    start_index = START_ITEM - 1
+    end_index = END_ITEM if END_ITEM is not None else None
+    for i, row in enumerate(data[start_index:end_index], start=START_ITEM):
+        catmat = row.get('CATMAT')
+        unidade_original = row.get('Unidade de Fornecimento')
+        unidade = UNIDADE_MAP.get(unidade_original, unidade_original)
+        
+        logging.info(f"Verificando linha {i}: CATMAT={catmat}, Unidade mapeada={unidade}")
+        
+        # Inserir CATMAT
+        try:
+            # Tentar múltiplos seletores para o campo CATMAT
+            catmat_field = None
+            selectors = [
+                (By.CSS_SELECTOR, 'input[placeholder="Digite aqui o material ou serviço a ser pesquisado"]'),
+                (By.CSS_SELECTOR, 'input.ng-tns-c238-1.p-autocomplete-input.p-inputtext.p-component.ng-star-inserted'),
+                (By.CSS_SELECTOR, 'input[aria-autocomplete="list"]'),
+                (By.XPATH, '//input[@type="text" and contains(@placeholder, "material")]'),
+                (By.CSS_SELECTOR, 'input[type="text"]')  # Último recurso
+            ]
+            for by, selector in selectors:
+                try:
+                    catmat_field = WebDriverWait(driver, 5).until(
+                        EC.element_to_be_clickable((by, selector))
+                    )
+                    logging.info(f"Campo CATMAT encontrado com seletor: {by} - {selector}")
+                    break
+                except:
+                    continue
+            if not catmat_field:
+                logging.error("Campo CATMAT não encontrado com nenhum seletor.")
+                continue
+            catmat_field.click()  # Focar no campo
+            catmat_field.clear()
+            catmat_field.send_keys(catmat)
+            catmat_field.send_keys(Keys.RETURN)
+            
+            # Aguardar dropdown de unidade aparecer
+            time.sleep(1)  # Aguardar 1 segundo para carregar os dados
+            try:
+                unidade_select = Select(WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'select.ng-pristine.ng-valid'))
+                ))
+                opcoes = [option.text for option in unidade_select.options]
+                if unidade in opcoes:
+                    logging.info(f"Unidade '{unidade}' compatível para CATMAT {catmat}.")
+                else:
+                    mensagem = f"Item AS OPÇÕES DE UNIDADE PARA O CATMAT {catmat} SÃO {', '.join(f'\"{op}\"' for op in opcoes)}."
+                    relatorio.append(mensagem)
+                    logging.warning(f"Unidade '{unidade}' não compatível. {mensagem}")
+            except Exception as e:
+                # Se o dropdown não aparecer, significa que o CATMAT não foi encontrado
+                mensagem = f"CATMAT {catmat} NÃO ENCONTRADO OU INVÁLIDO (dropdown de unidade não apareceu)."
+                relatorio.append(mensagem)
+                logging.warning(f"CATMAT {catmat} não encontrado ou inválido: dropdown não apareceu.")
+                continue
+        except Exception as e:
+            logging.error(f"Erro ao processar CATMAT {catmat}: {e}")
+            continue
+    
+    # Salvar relatório
+    if relatorio:
+        with open('relatorio_unidades.txt', 'w', encoding='utf-8') as f:
+            for linha in relatorio:
+                f.write(linha + '\n')
+        logging.info("Relatório salvo em 'relatorio_unidades.txt'.")
+    else:
+        logging.info("Todas as unidades são compatíveis. Nenhum relatório gerado.")
 
 def main():
     sheet = setup_google_sheets()
@@ -231,8 +317,11 @@ def main():
     driver = setup_selenium()
     try:
         login_site(driver)
-        process_data(driver, data)
-        input("Processamento concluído. Verifique os itens adicionados na janela. Pressione Enter para fechar o navegador...")
+        if args.verificar:
+            verificar_unidades(driver, data)
+        else:
+            process_data(driver, data)
+            input("Processamento concluído. Verifique os itens adicionados na janela. Pressione Enter para fechar o navegador...")
         driver.quit()
     except Exception as e:
         logging.error(f"Erro no main: {e}")

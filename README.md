@@ -16,6 +16,8 @@ Este script automatiza o preenchimento de dados de uma planilha Google Sheets em
    - `GOOGLE_SHEETS_CREDENTIALS_PATH`: Caminho para `credentials.json`
    - `SPREADSHEET_ID`: ID da planilha (apenas o ID, não o link completo. Ex: se o link é https://docs.google.com/spreadsheets/d/1abc123.../edit, use apenas "1abc123...")
    - `SHEET_NAME`: Nome da aba da planilha (ex: "Detalhamento por itens")
+   - `START_ITEM`: Número da linha inicial para processar (1-based, padrão: 1)
+   - `END_ITEM`: Número da linha final para processar (opcional, deixe vazio ou 'None' para processar até o fim)
    - `SITE_USERNAME` e `SITE_PASSWORD`: Credenciais do site
    - `SITE_URL`: URL de login do site
    - `BUSCA_URL`: URL da página de busca de materiais
@@ -61,11 +63,17 @@ Este script automatiza o preenchimento de dados de uma planilha Google Sheets em
 **Formato da Planilha:**
 
 - A planilha Google Sheets deve conter obrigatoriamente as colunas `CATMAT` e `Unidade de Fornecimento` (escritas exatamente dessa forma, sem variações).
+- Os dados devem começar a partir da linha especificada em `START_ITEM` (padrão: 1).
+
+**Modos de Execução:**
+
+- **Modo Verificação:** Executa `python3 automatizador.py --verificar` para verificar se as unidades mapeadas são compatíveis com as opções do sistema. Gera um relatório em `relatorio_unidades.txt` com itens incompatíveis, informando as opções disponíveis (ex: "Item AS OPÇÕES DE UNIDADE PARA O CATMAT 12345 SÃO 'grama', 'quilograma' e 'embalagem de 1 kg'."). Respeita as configurações `START_ITEM` e `END_ITEM` para limitar o escaneamento.
+- **Modo Cadastro:** Executa `python3 automatizador.py` (padrão) para cadastrar os itens no sistema após ajustes baseados no relatório. Respeita as configurações `START_ITEM` e `END_ITEM` para limitar o processamento.
 
 1. Configure o `.env` e `credentials.json`.
-2. Execute: `python automatizador.py`
-3. O script fará login automaticamente, navegará para a página de IRP, e aguardará sua interação manual para "Incluir Itens".
-4. Após pressionar Enter, processará os itens da planilha, inserindo CATMAT, selecionando unidades e adicionando ao carrinho.
+2. Execute o modo desejado.
+3. No modo verificação, revise o `relatorio_unidades.txt` e ajuste a planilha conforme necessário.
+4. No modo cadastro, o script fará login automaticamente, navegará para a página de IRP, aguardará interação manual para "Incluir Itens", processará os itens e adicionará ao carrinho.
 
 **Fluxo Automático**:
 
