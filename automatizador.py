@@ -3,7 +3,7 @@ import time
 import logging
 from dotenv import load_dotenv
 import gspread
-from oauth2client.service_account import ServiceAccountCredentials
+from google.oauth2.service_account import Credentials
 from selenium import webdriver
 from selenium.webdriver.edge.service import Service as EdgeService
 from selenium.webdriver.common.by import By
@@ -49,6 +49,8 @@ UNIDADE_MAP = {
     "Caixa com 100 unidades": "Caixa 100 Unidade",
     "1 L": "Litro",
     "Caixa com 50 unidades": "Caixa 50 Unidade",
+    "GRAMA": "Grama",
+
 }
 
 # Configurações do Google Sheets
@@ -69,7 +71,7 @@ END_ITEM = 3   # Item final (None para processar até o fim)
 def setup_google_sheets():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(GOOGLE_SHEETS_CREDENTIALS_PATH, scope)
+        creds = Credentials.from_service_account_file(GOOGLE_SHEETS_CREDENTIALS_PATH, scopes=scope)
         client = gspread.authorize(creds)
         sheet = client.open_by_key(SPREADSHEET_ID).worksheet(SHEET_NAME)
         logging.info("Conectado ao Google Sheets com sucesso.")
