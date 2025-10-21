@@ -47,11 +47,8 @@ UNIDADE_MAP = {
     "Tubo 6 metros": "Tubo 6 Metro",
     "Embalagem 100 gramas": "Embalagem 100 Grama",
     "Caixa com 100 unidades": "Caixa 100 Unidade",
+    "1 L": "Litro",
     "Caixa com 50 unidades": "Caixa 50 Unidade",
-    "Embalagem com 100 unidades": "Embalagem 100 Unidade"
-
-    # Adicione mais mapeamentos conforme necessário
-    # "Outra Unidade": "Texto Exato no Dropdown"
 }
 
 # Configurações do Google Sheets
@@ -67,7 +64,7 @@ BUSCA_URL = os.getenv('BUSCA_URL')
 
 # Configurações de processamento
 START_ITEM = 1  # Item inicial (linha START_ITEM da planilha)
-END_ITEM = None   # Item final (None para processar até o fim)
+END_ITEM = 3   # Item final (None para processar até o fim)
 
 def setup_google_sheets():
     try:
@@ -82,7 +79,7 @@ def setup_google_sheets():
         raise
 
 def setup_selenium():
-    service = EdgeService(executable_path='/home/tiago/Documentos/Github/automatizar/edgedriver_linux64/msedgedriver')
+    service = EdgeService(executable_path='/home/tiago/Documentos/Github/automatizador-tiago/edgedriver_linux64/msedgedriver')
     driver = webdriver.Edge(service=service)
     return driver
 
@@ -142,7 +139,7 @@ def process_data(driver, data):
     for i, row in enumerate(data[start_index:end_index], start=START_ITEM):
         try:
             catmat = row.get('CATMAT')  # Coluna confirmada
-            unidade_original = row.get('UNIDADE')
+            unidade_original = row.get('Unidade de Fornecimento')  # Coluna confirmada
             unidade = UNIDADE_MAP.get(unidade_original, unidade_original)  # Usar a unidade original se não mapeada
             logging.info(f"Processando linha {i}: CATMAT={catmat}, Unidade={unidade}")
 
